@@ -50,6 +50,11 @@ ok "mariadb healthy"
 start_web
 ok "web healthy before setup"
 
+# Started before setup, like a fresh Portainer deploy: it must wait rather than run jobs
+docker run -d --name "$P-cron" --network "$P" \
+    -v "$P-config:/var/www/config" -v "$P-uploads:/var/www/html/uploads" \
+    "$IMAGE" cron >/dev/null
+
 docker exec -u www-data -w /var/www/html/scripts "$P-web" php setup_cli.php \
     --host=itflow-db --username=itflow --password="$DB_PASS" --database=itflow \
     --base-url=localhost --locale=en_US --timezone=Europe/Madrid --currency=EUR \
@@ -84,13 +89,14 @@ ok "restart keeps install (config + migrations)"
 docker exec -u www-data -w /var/www/html/cron "$P-web" php cron.php || fail "cron.php"
 ok "cron.php ran"
 
-docker run -d --name "$P-cron" --network "$P" \
-    -v "$P-config:/var/www/config" -v "$P-uploads:/var/www/html/uploads" \
-    "$IMAGE" cron >/dev/null
-sleep 5
+for _ in $(seq 1 15); do
+    docker logs "$P-cron" 2>&1 | grep -q "cron started" && break
+    sleep 2
+done
 [ "$(docker inspect -f '{{.State.Running}}' "$P-cron")" = true ] || fail "cron container exited"
-docker logs "$P-cron" 2>&1 | grep -q "cron started" || fail "cron container did not start its loop"
+docker logs "$P-cron" 2>&1 | grep -q "cron started" || fail "cron container did not start after setup"
+sleep 3
 ! docker logs "$P-cron" 2>&1 | grep -q "cron.php exited" || fail "cron.php failed in cron container"
-ok "cron container running"
+ok "cron container waited for setup, then ran cleanly"
 
 echo "SMOKE TEST PASSED"

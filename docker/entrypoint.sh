@@ -42,10 +42,12 @@ log "image $(cat /usr/src/itflow-image-version)"
 
 case "${1:-}" in
     cron)
-        # Nothing to run until the setup wizard has written config.php
-        until [ -s "$CONFIG" ]; do
-            log "cron waiting for setup (no config.php yet)"
-            sleep 30
+        # The wizard writes config.php at its database step but only appends
+        # $config_enable_setup = 0 once company and settings rows exist. Jobs started in
+        # between die on the missing settings row, so wait for the finished marker.
+        until [ -s "$CONFIG" ] && grep -q '^\$config_enable_setup = 0' "$CONFIG"; do
+            log "cron waiting for setup to finish"
+            sleep 10
         done
         log "cron started"
         cd "$WEBROOT/cron"
