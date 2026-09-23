@@ -1,7 +1,7 @@
 # ITFlow stack for Portainer (lab) > Stacks > Add stack > Web editor. Stack name: itflow
 #
 # Environment variables (Portainer "Environment variables" section):
-#   IMAGE_TAG=v26.09.3-internal-v2
+#   IMAGE_TAG=v26.09.3-internal-v3
 #   ITFLOW_HOST=ops.yoshovski.com
 #   TZ=Europe/Madrid
 #   ITFLOW_DB_PASS=<openssl rand -base64 32, stored in Vaultwarden>
