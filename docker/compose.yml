@@ -1,0 +1,135 @@
+# ITFlow stack for Portainer (lab) > Stacks > Add stack > Web editor. Stack name: itflow
+#
+# Environment variables (Portainer "Environment variables" section):
+#   IMAGE_TAG=v26.09.3-internal-v1
+#   TZ=Europe/Madrid
+#   ITFLOW_DB_PASS=<openssl rand -base64 32, stored in Vaultwarden>
+#
+# Before the first deploy, on the host:  sudo mkdir -p /data/backups/itflow
+#
+# Exposed only through lab's Cloudflare Tunnel (core-gateway-tunnel) on sre_public_net:
+#   Cloudflare Zero Trust > Tunnels > lab tunnel > Public hostname: ops.yoshovski.com -> http://itflow:80
+#   Protect the hostname with a Cloudflare Access application.
+#
+# First run: open https://ops.yoshovski.com/setup
+#   Database host: itflow-db   user: itflow   database: itflow   password: ITFLOW_DB_PASS
+
+services:
+  itflow:
+    image: ghcr.io/yoshovski/itflow:${IMAGE_TAG}
+    container_name: itflow
+    hostname: itflow
+    restart: unless-stopped
+    depends_on:
+      itflow-db:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - itflow-config:/var/www/config
+      - itflow-uploads:/var/www/html/uploads
+    networks:
+      - itflow_internal
+      - sre_public_net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1/login.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # cron/cron.php every minute: recurring tickets, alerts, mail queue
+  itflow-cron:
+    image: ghcr.io/yoshovski/itflow:${IMAGE_TAG}
+    container_name: itflow-cron
+    restart: unless-stopped
+    command: ["cron"]
+    depends_on:
+      itflow:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - itflow-config:/var/www/config
+      - itflow-uploads:/var/www/html/uploads
+    networks:
+      - itflow_internal
+      - sre_public_net          # outbound: SMTP, domain/cert refreshers
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    logging: *logging
+
+  itflow-db:
+    image: mariadb:11.8
+    container_name: itflow-db
+    hostname: itflow-db
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      MARIADB_RANDOM_ROOT_PASSWORD: "true"
+      MARIADB_DATABASE: itflow
+      MARIADB_USER: itflow
+      MARIADB_PASSWORD: ${ITFLOW_DB_PASS}
+    volumes:
+      - itflow-db:/var/lib/mysql
+    networks:
+      - itflow_internal
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging: *logging
+
+  # Nightly DB dump to /data/backups/itflow; a lab Cronicle job ships it to ionos global-minio.
+  itflow-db-backup:
+    image: fradelg/mysql-cron-backup:1.15.0
+    container_name: itflow-db-backup
+    restart: unless-stopped
+    depends_on:
+      itflow-db:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ}
+      MYSQL_HOST: itflow-db
+      MYSQL_PORT: 3306
+      MYSQL_USER: itflow
+      MYSQL_PASS: ${ITFLOW_DB_PASS}
+      MYSQL_DATABASE: itflow
+      CRON_TIME: "15 2 * * *"
+      MAX_BACKUPS: 14
+      INIT_BACKUP: "1"
+      GZIP_LEVEL: 9
+      MYSQLDUMP_OPTS: --no-tablespaces --single-transaction
+    volumes:
+      - /data/backups/itflow:/backup
+    networks:
+      - itflow_internal
+    logging: *logging
+
+volumes:
+  itflow-config:
+  itflow-uploads:
+  itflow-db:
+
+networks:
+  itflow_internal:
+    internal: true            # the database is never reachable from the tunnel network
+  sre_public_net:
+    external: true
