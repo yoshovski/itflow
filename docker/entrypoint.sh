@@ -17,6 +17,22 @@ log() {
     echo "itflow: $*"
 }
 
+# ITFLOW_HOST (e.g. ops.example.com) pins $config_base_url, which ITFlow uses to build every
+# e-mailed and guest link. Setup records whatever host it was opened on; this keeps the
+# stack's value authoritative, including after a rename.
+apply_host() {
+    [ -n "${ITFLOW_HOST:-}" ] && [ -s "$CONFIG" ] || return 0
+    case "$ITFLOW_HOST" in
+        *[!A-Za-z0-9./:-]*)
+            log "ignoring ITFLOW_HOST='$ITFLOW_HOST': use a hostname without scheme, e.g. ops.example.com"
+            return 0
+            ;;
+    esac
+    # Edit the real file, not the symlink, so sed -i does not replace the link with a copy
+    as_www sed -i "s|^\$config_base_url = .*|\$config_base_url = '$ITFLOW_HOST';|" /var/www/config/config.php
+    log "base URL: $ITFLOW_HOST"
+}
+
 # The uploads volume starts as a copy of the image's uploads/, but a volume created by an older
 # image won't get new guard files. Re-seed without overwriting anything already there.
 cp -a --update=none /usr/src/itflow-uploads/. "$WEBROOT/uploads/"
@@ -42,6 +58,7 @@ case "${1:-}" in
 
     apache2-foreground)
         if [ -s "$CONFIG" ]; then
+            apply_host
             if [ "${ITFLOW_AUTO_DB_UPDATE:-1}" = "1" ]; then
                 log "applying pending database updates"
                 (cd "$WEBROOT/scripts" && as_www php update_cli.php --update_db)

@@ -42,6 +42,32 @@ Image-only changes (Dockerfile, entrypoint) on the same ITFlow version bump the 
 Container commands: default = Apache (runs DB migrations first; `ITFLOW_AUTO_DB_UPDATE=0` disables that),
 `cron` = `cron.php` loop, anything else is exec'd.
 
+## Access model (Cloudflare Access)
+
+ITFlow has no self-registration: agents are created by an admin, and client-portal logins only exist
+for contacts you enable (leave the client portal off). On top of that, Cloudflare Access decides who
+can reach the host at all:
+
+| Access application | Path | Policy |
+|---|---|---|
+| `ops.<domain>` | (whole host) | **Allow**: your e-mail only |
+| `ops.<domain>` | `/guest` | **Bypass**: everyone |
+| `ops.<domain>` | `/css`, `/js`, `/libs` | **Bypass**: everyone (static assets used by guest pages) |
+| `ops.<domain>` | `/uploads/settings` | **Bypass**: everyone (company logo on guest pages) |
+
+The most specific path wins, so guests reach only the `/guest/*` pages. Each guest link carries its own
+random key. Everything else, including `/login.php`, the API and client files under `/uploads/clients`,
+stays behind your login. Guest downloads of shared files go through `/guest/guest_download_file.php`.
+
+What a guest link can show:
+- **Shared item** (Share button on an asset, document, file, contact or credential): expiry date and
+  view-count limit, and it can be revoked.
+- **Ticket** (`/guest/guest_view_ticket.php?ticket_id=…&url_key=…`): read-only subject, details, status
+  and public replies. Internal notes and ticket tasks aren't shown. It never expires. ITFlow sends it in
+  the ticket e-mails to the ticket's contact. There is no copy-link button in the agent UI.
+
+`ITFLOW_HOST` sets `$config_base_url`, so these links point at the right host.
+
 ## After first install
 
 1. Maintenance > Cron: turn cron **on**. It ships off and nothing scheduled runs until it's enabled.

@@ -31,7 +31,7 @@ http_code() {
 }
 
 start_web() {
-    docker run -d --name "$P-web" --network "$P" \
+    docker run -d --name "$P-web" --network "$P" -e ITFLOW_HOST="${ITFLOW_HOST:-}" \
         -v "$P-config:/var/www/config" -v "$P-uploads:/var/www/html/uploads" \
         --health-cmd 'curl -fsS -o /dev/null http://127.0.0.1/login.php' --health-interval 2s \
         "$IMAGE" >/dev/null
@@ -74,8 +74,10 @@ docker exec "$P-web" curl -sI http://127.0.0.1/login.php | tr -d '\r' | grep -qi
 ok "Server header minimal"
 
 docker rm -f "$P-web" >/dev/null
-start_web
+ITFLOW_HOST=ops.example.com start_web
 docker logs "$P-web" 2>&1 | grep -q "applying pending database updates" || fail "update_db did not run on restart"
+docker exec "$P-web" grep -q "^\$config_base_url = 'ops.example.com';" /var/www/config/config.php || fail "ITFLOW_HOST not applied"
+docker exec "$P-web" test -L /var/www/html/config.php || fail "config.php symlink replaced"
 [ "$(http_code /login.php)" = 200 ] || fail "login.php not 200 after restart"
 ok "restart keeps install (config + migrations)"
 

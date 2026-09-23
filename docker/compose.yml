@@ -1,7 +1,8 @@
 # ITFlow stack for Portainer (lab) > Stacks > Add stack > Web editor. Stack name: itflow
 #
 # Environment variables (Portainer "Environment variables" section):
-#   IMAGE_TAG=v26.09.3-internal-v1
+#   IMAGE_TAG=v26.09.3-internal-v2
+#   ITFLOW_HOST=ops.yoshovski.com
 #   TZ=Europe/Madrid
 #   ITFLOW_DB_PASS=<openssl rand -base64 32, stored in Vaultwarden>
 #
@@ -9,7 +10,8 @@
 #
 # Exposed only through lab's Cloudflare Tunnel (core-gateway-tunnel) on sre_public_net:
 #   Cloudflare Zero Trust > Tunnels > lab tunnel > Public hostname: ops.yoshovski.com -> http://itflow:80
-#   Protect the hostname with a Cloudflare Access application.
+#   Cloudflare Access: one app for the whole hostname (only you), plus Bypass apps for the
+#   guest paths /guest, /css, /js, /libs, /uploads/settings (see docker/README.md).
 #
 # First run: open https://ops.yoshovski.com/setup
 #   Database host: itflow-db   user: itflow   database: itflow   password: ITFLOW_DB_PASS
@@ -25,6 +27,7 @@ services:
         condition: service_healthy
     environment:
       TZ: ${TZ}
+      ITFLOW_HOST: ${ITFLOW_HOST}       # base URL for e-mailed and guest links
     volumes:
       - itflow-config:/var/www/config
       - itflow-uploads:/var/www/html/uploads
