@@ -72,7 +72,7 @@ foreach ($hosts as $host => $valid) {
     $error = curl_errno($curl);
     $status = curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
     check(
-        $valid ? ($error === 0 && $status >= 200 && $status < 400) : $error === CURLE_PEER_FAILED_VERIFICATION,
+        $valid ? ($error === 0 && $status >= 200 && $status < 400) : $error === CURLE_SSL_CACERT,
         "PHP cURL " . ($valid ? 'valid HTTPS control' : 'certificate rejection') . ": $host (error $error)"
     );
 
