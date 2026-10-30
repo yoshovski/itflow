@@ -38,7 +38,7 @@ start_web() {
     wait_healthy "$P-web"
 }
 
-docker network create "$P" >/dev/null
+docker network create --internal "$P" >/dev/null
 docker run -d --name "$P-db" --network "$P" --network-alias itflow-db \
     -e MARIADB_RANDOM_ROOT_PASSWORD=true -e MARIADB_DATABASE=itflow \
     -e MARIADB_USER=itflow -e MARIADB_PASSWORD="$DB_PASS" \
@@ -49,6 +49,16 @@ ok "mariadb healthy"
 
 start_web
 ok "web healthy before setup"
+
+# Confirm Apache uses the patched interpreter and the pre-request INI mitigation.
+docker exec -i "$P-web" sh -c 'cat > /var/www/html/security_probe.php' <<'PHP'
+<?php
+echo json_encode(['version' => PHP_VERSION_ID, 'sapi' => PHP_SAPI,
+    'upload_progress' => ini_get('session.upload_progress.enabled')]);
+PHP
+docker exec "$P-web" curl -fsS http://127.0.0.1/security_probe.php | \
+  docker exec -i "$P-web" php -r '$d=json_decode(stream_get_contents(STDIN), true, flags: JSON_THROW_ON_ERROR); if ($d["version"] < 80427 || $d["version"] >= 80500 || $d["sapi"] !== "apache2handler" || filter_var($d["upload_progress"], FILTER_VALIDATE_BOOLEAN)) { exit(1); }'
+ok "Apache mod_php runtime and upload-progress mitigation verified"
 
 # Started before setup, like a fresh Portainer deploy: it must wait rather than run jobs
 docker run -d --name "$P-cron" --network "$P" \

@@ -13,7 +13,7 @@
 #
 # Build from the repository root:  docker build -f docker/Dockerfile .
 
-FROM php:8.4-apache-trixie
+FROM php:8.4.27-apache-trixie@sha256:be1326658a7d36dba6be79a71212d6ff9c5f854335b8ba77d714da1852c1b2ea
 
 ARG ITFLOW_VERSION=dev
 ARG VCS_REF=unknown
@@ -31,7 +31,8 @@ LABEL org.opencontainers.image.title="ITFlow" \
 COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
 RUN install-php-extensions intl mysqli gd zip \
  && apt-get update \
- && apt-get install -y --no-install-recommends whois dnsutils \
+ && apt-get install -y --no-install-recommends ca-certificates whois dnsutils \
+ && update-ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"

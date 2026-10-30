@@ -31,6 +31,13 @@ Disable the `update_check` job in Maintenance > Cron.
 
 Image-only changes (Dockerfile, entrypoint) on the same ITFlow version bump the suffix: `-internal-v2`.
 
+Security rebuilds preserve the ITFlow application source and PHP 8.4 runtime family.
+The base image is pinned by version and digest; both the web and cron services must use
+the same rebuilt image. `docker/check-security.php` checks the PHP version, required
+extensions, session upload-progress setting and CA stores. With `--online`, it also
+checks PHP cURL and OpenSSL streams against valid HTTPS and compromised-chain controls.
+CI runs these checks and the full installation/restart/cron smoke test before publication.
+
 ## Runtime layout
 
 | Path | What | Persist |
