@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CANDIDATE_VERSION: v26.09.3-internal-v4-phpfix-20261030
-  CANDIDATE_IMAGE: ghcr.io/yoshovski/itflow:v26.09.3-internal-v4-phpfix-20261030
+  CANDIDATE_VERSION: v26.09.3-internal-v5-logsafe-20261101
+  CANDIDATE_IMAGE: ghcr.io/yoshovski/itflow:v26.09.3-internal-v5-logsafe-20261101
 
 jobs:
   image:
