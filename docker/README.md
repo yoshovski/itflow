@@ -89,3 +89,13 @@ docker/smoke-test.sh itflow:test
 ```
 
 `compose.yml` in this folder is the Portainer stack.
+
+### Access-log privacy
+
+The image selects `itflow_safe` for all default Apache access logs. It retains
+method, path, protocol, status and byte count, but omits query strings, Referer
+and User-Agent. ITFlow API GET requests carry API keys in their query string;
+logging the full request line (`%r`) would persist these keys in Docker logs.
+The smoke test sends dummy keys in the query and Referer and checks that the
+keys are absent while the API path remains present. Apply the same format to
+any additional custom virtual hosts or logging destinations.

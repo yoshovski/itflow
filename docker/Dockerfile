@@ -41,7 +41,10 @@ COPY docker/php.ini "$PHP_INI_DIR/conf.d/zz-itflow.ini"
 # zz- so it loads after the base image's security.conf (ServerTokens)
 COPY docker/apache-itflow.conf /etc/apache2/conf-available/zz-itflow.conf
 RUN a2enmod rewrite remoteip headers \
- && a2enconf zz-itflow
+ && a2enconf zz-itflow \
+ && sed -ri 's@^([[:space:]]*CustomLog[[:space:]]+[^[:space:]]+)[[:space:]]+[^[:space:]]+@\1 itflow_safe@' \
+      /etc/apache2/sites-available/*.conf \
+      /etc/apache2/conf-available/other-vhosts-access-log.conf
 
 COPY --chown=www-data:www-data . /var/www/html/
 COPY docker/entrypoint.sh /usr/local/bin/itflow-entrypoint
