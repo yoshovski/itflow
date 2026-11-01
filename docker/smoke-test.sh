@@ -91,7 +91,7 @@ ok "Server header minimal"
 # Exercise API failure and normal-page access with dummy credentials in query and
 # Referer. Retain useful path/status logging while excluding credential values.
 log_marker="dummy-log-secret-$(openssl rand -hex 8)"
-for path in /api/v1/assets/read.php /login.php; do
+for path in /api/v1/assets/read.php /login.php /scripts/update_cli.php; do
     docker exec "$P-web" curl -s -o /dev/null \
         -H 'X-Forwarded-Proto: https' \
         -H "Referer: https://example.invalid/?api_key=$log_marker" \
@@ -104,7 +104,7 @@ if docker logs "$P-web" 2>&1 | grep -q "$log_marker"; then
     exit 1
 fi
 docker logs "$P-web" 2>&1 | grep -q 'GET /api/v1/assets/read.php HTTP/1.1' || fail "API path missing from access log"
-ok "access logs omit query strings and Referer credentials"
+ok "access/error logs omit query strings and Referer credentials"
 
 docker rm -f "$P-web" >/dev/null
 ITFLOW_HOST=ops.example.com start_web
