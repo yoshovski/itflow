@@ -52,12 +52,23 @@ jobs:
           file: docker/Dockerfile
           platforms: linux/amd64
           load: true
+          pull: true
+          no-cache: true
           tags: itflow:test
           build-args: |
             ITFLOW_VERSION=${{ steps.version.outputs.app }}
             VCS_REF=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Check patched PHP and certificate trust
+        run: |
+          docker run --rm --read-only --network none --cap-drop ALL \
+            --security-opt no-new-privileges --entrypoint php \
+            -v "$PWD/docker/check-security.php:/check.php:ro" itflow:test /check.php
+          docker run --rm --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --entrypoint php \
+            -v "$PWD/docker/check-security.php:/check.php:ro" itflow:test /check.php --online
 
       - name: Smoke test (install + web + cron)
         run: docker/smoke-test.sh itflow:test

@@ -8,6 +8,8 @@ on:
 
 jobs:
   run:
+    # The inherited welcome message belongs to upstream, not this maintained fork.
+    if: github.repository == 'itflow-org/itflow'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/first-interaction@v1.2.0

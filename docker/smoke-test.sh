@@ -38,7 +38,7 @@ start_web() {
     wait_healthy "$P-web"
 }
 
-docker network create "$P" >/dev/null
+docker network create --internal "$P" >/dev/null
 docker run -d --name "$P-db" --network "$P" --network-alias itflow-db \
     -e MARIADB_RANDOM_ROOT_PASSWORD=true -e MARIADB_DATABASE=itflow \
     -e MARIADB_USER=itflow -e MARIADB_PASSWORD="$DB_PASS" \
@@ -49,6 +49,16 @@ ok "mariadb healthy"
 
 start_web
 ok "web healthy before setup"
+
+# Confirm Apache uses the patched interpreter and the pre-request INI mitigation.
+docker exec -i "$P-web" sh -c 'cat > /var/www/html/security_probe.php' <<'PHP'
+<?php
+echo json_encode(['version' => PHP_VERSION_ID, 'sapi' => PHP_SAPI,
+    'upload_progress' => ini_get('session.upload_progress.enabled')]);
+PHP
+docker exec "$P-web" curl -fsS http://127.0.0.1/security_probe.php | \
+  docker exec -i "$P-web" php -r '$d=json_decode(stream_get_contents(STDIN), true, flags: JSON_THROW_ON_ERROR); if ($d["version"] < 80427 || $d["version"] >= 80500 || $d["sapi"] !== "apache2handler" || filter_var($d["upload_progress"], FILTER_VALIDATE_BOOLEAN)) { exit(1); }'
+ok "Apache mod_php runtime and upload-progress mitigation verified"
 
 # Started before setup, like a fresh Portainer deploy: it must wait rather than run jobs
 docker run -d --name "$P-cron" --network "$P" \
@@ -78,9 +88,27 @@ ok ".htaccess guards active"
 docker exec "$P-web" curl -sI http://127.0.0.1/login.php | tr -d '\r' | grep -qi '^Server: Apache$' || fail "Apache version leaks in Server header"
 ok "Server header minimal"
 
+# Exercise API failure and normal-page access with dummy credentials in query and
+# Referer. Retain useful path/status logging while excluding credential values.
+log_marker="dummy-log-secret-$(openssl rand -hex 8)"
+for path in /api/v1/assets/read.php /login.php /scripts/update_cli.php; do
+    docker exec "$P-web" curl -s -o /dev/null \
+        -H 'X-Forwarded-Proto: https' \
+        -H "Referer: https://example.invalid/?api_key=$log_marker" \
+        "http://127.0.0.1$path?api_key=$log_marker&api_key_decrypt_password=$log_marker"
+done
+sleep 1
+if docker logs "$P-web" 2>&1 | grep "$log_marker" >/dev/null; then
+    # Do not dump credential-bearing logs on failure.
+    echo "FAIL: access logs contain the dummy credential" >&2
+    exit 1
+fi
+docker logs "$P-web" 2>&1 | grep 'GET /api/v1/assets/read.php HTTP/1.1' >/dev/null || fail "API path missing from access log"
+ok "access/error logs omit query strings and Referer credentials"
+
 docker rm -f "$P-web" >/dev/null
 ITFLOW_HOST=ops.example.com start_web
-docker logs "$P-web" 2>&1 | grep -q "applying pending database updates" || fail "update_db did not run on restart"
+docker logs "$P-web" 2>&1 | grep "applying pending database updates" >/dev/null || fail "update_db did not run on restart"
 docker exec "$P-web" grep -q "^\$config_base_url = 'ops.example.com';" /var/www/config/config.php || fail "ITFLOW_HOST not applied"
 docker exec "$P-web" test -L /var/www/html/config.php || fail "config.php symlink replaced"
 [ "$(http_code /login.php)" = 200 ] || fail "login.php not 200 after restart"
@@ -90,13 +118,13 @@ docker exec -u www-data -w /var/www/html/cron "$P-web" php cron.php || fail "cro
 ok "cron.php ran"
 
 for _ in $(seq 1 15); do
-    docker logs "$P-cron" 2>&1 | grep -q "cron started" && break
+    docker logs "$P-cron" 2>&1 | grep "cron started" >/dev/null && break
     sleep 2
 done
 [ "$(docker inspect -f '{{.State.Running}}' "$P-cron")" = true ] || fail "cron container exited"
-docker logs "$P-cron" 2>&1 | grep -q "cron started" || fail "cron container did not start after setup"
+docker logs "$P-cron" 2>&1 | grep "cron started" >/dev/null || fail "cron container did not start after setup"
 sleep 3
-! docker logs "$P-cron" 2>&1 | grep -q "cron.php exited" || fail "cron.php failed in cron container"
+! docker logs "$P-cron" 2>&1 | grep "cron.php exited" >/dev/null || fail "cron.php failed in cron container"
 ok "cron container waited for setup, then ran cleanly"
 
 echo "SMOKE TEST PASSED"

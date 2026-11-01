@@ -31,6 +31,13 @@ Disable the `update_check` job in Maintenance > Cron.
 
 Image-only changes (Dockerfile, entrypoint) on the same ITFlow version bump the suffix: `-internal-v2`.
 
+Security rebuilds preserve the ITFlow application source and PHP 8.4 runtime family.
+The base image is pinned by version and digest; both the web and cron services must use
+the same rebuilt image. `docker/check-security.php` checks the PHP version, required
+extensions, session upload-progress setting and CA stores. With `--online`, it also
+checks PHP cURL and OpenSSL streams against valid HTTPS and compromised-chain controls.
+CI runs these checks and the full installation/restart/cron smoke test before publication.
+
 ## Runtime layout
 
 | Path | What | Persist |
@@ -82,3 +89,14 @@ docker/smoke-test.sh itflow:test
 ```
 
 `compose.yml` in this folder is the Portainer stack.
+
+### Access-log privacy
+
+The image selects `itflow_safe` for all default Apache access logs. It retains
+method, path, protocol, status and byte count, but omits query strings, Referer
+and User-Agent. ITFlow API GET requests carry API keys in their query string;
+logging the full request line (`%r`) would persist these keys in Docker logs.
+The error-log format also omits Apache's default Referer suffix.
+The smoke test covers an Apache-denied path as well as API and page requests, sends dummy keys in the query and Referer and checks that the
+keys are absent while the API path remains present. Apply the same format to
+any additional custom virtual hosts or logging destinations.
